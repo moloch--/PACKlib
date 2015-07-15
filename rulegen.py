@@ -1,6 +1,5 @@
-#!/usr/bin/env python
-# Rulegen.py - Advanced automated password rule and wordlist generator for the 
-#              Hashcat password cracker using the Levenshtein Reverse Path 
+# Rulegen.py - Advanced automated password rule and wordlist generator for the
+#              Hashcat password cracker using the Levenshtein Reverse Path
 #              algorithm and Enchant spell checking library.
 #
 # This tool is part of PACK (Password Analysis and Cracking Kit)
@@ -15,30 +14,31 @@
 import sys
 import re
 import time
-import operator
 import enchant
 
 from optparse import OptionParser, OptionGroup
-
 from collections import Counter
 
 import subprocess
-
 import multiprocessing
 
+
 VERSION = "0.0.3"
+LIB_VERSION = "0.0.1"
 
 # Testing rules with hashcat --stdout
 HASHCAT_PATH = "hashcat/"
 
+
 # Rule Generator class responsible for the complete cycle of rule generation
-class RuleGen:
+class RuleGen(object):
 
     # Initialize Rule Generator class
-    def __init__(self,language="en",providers="aspell,myspell",basename='analysis',threads=4):
+    def __init__(self, language="en", providers="aspell,myspell",
+                 basename='analysis', threads=4):
 
         self.enchant_broker = enchant.Broker()
-        self.enchant_broker.set_ordering("*",providers)
+        self.enchant_broker.set_ordering("*", providers)
 
         self.enchant = enchant.Dict(language, self.enchant_broker)
 
@@ -64,13 +64,13 @@ class RuleGen:
         self.word = None # Custom word to use.
         self.quiet = False
 
-        ########################################################################
+        #######################################################################
         # Word and Rule Statistics
         self.numeric_stats_total = 0
         self.special_stats_total = 0
         self.foreign_stats_total = 0
 
-        ########################################################################
+        #######################################################################
         # Preanalysis Password Patterns
         self.password_pattern = dict()
         self.password_pattern["insertion"] = re.compile('^[^a-z]*(?P<password>.+?)[^a-z]*$', re.IGNORECASE)
@@ -78,7 +78,7 @@ class RuleGen:
         self.password_pattern["alldigits"] = re.compile('^(\d+)$', re.IGNORECASE)
         self.password_pattern["allspecial"]= re.compile('^([^a-z0-9]+)$', re.IGNORECASE)
 
-        ########################################################################
+        #######################################################################
         # Hashcat Rules Engine
         self.hashcat_rule = dict()
 
@@ -156,7 +156,7 @@ class RuleGen:
         self.leet["$"] = "s"
         self.leet["+"] = "t"
 
-        ########################################################################
+        #######################################################################
         # Preanalysis rules to bruteforce for each word
         self.preanalysis_rules = []
         self.preanalysis_rules.append(([],self.hashcat_rule[':'])) # Blank rule
@@ -164,9 +164,9 @@ class RuleGen:
         #self.preanalysis_rules.append((['{'],self.hashcat_rule['}'])) # Rotate left
         #self.preanalysis_rules.append((['}'],self.hashcat_rule['{'])) # Rotate right
 
-    ############################################################################
+    ###########################################################################
     # Calculate Levenshtein edit path matrix
-    def levenshtein(self,word,password):
+    def levenshtein(self, word, password):
         matrix = []
 
         # Generate and populate the initial matrix
@@ -181,13 +181,13 @@ class RuleGen:
                     matrix[i].append(0)
 
         # Calculate edit distance for each substring
-        for i in xrange(1,len(password) + 1):
-            for j in xrange(1,len(word) + 1):
+        for i in xrange(1, len(password) + 1):
+            for j in xrange(1, len(word) + 1):
                 if password[i-1] == word[j-1]:
                     matrix[i][j] = matrix[i-1][j-1]
                 else:
-                    insertion    = matrix[i-1][j] + 1
-                    deletion     = matrix[i][j-1] + 1
+                    insertion = matrix[i-1][j] + 1
+                    deletion = matrix[i][j-1] + 1
                     substitution = matrix[i-1][j-1] + 1
                     matrix[i][j] = min(insertion, deletion, substitution)
 
@@ -202,7 +202,7 @@ class RuleGen:
             return self.levenshtein_distance(s2, s1)
         if not s1:
             return len(s2)
-     
+
         previous_row = xrange(len(s2) + 1)
         for i, c1 in enumerate(s1):
             current_row = [i + 1]
@@ -212,7 +212,7 @@ class RuleGen:
                 substitutions = previous_row[j] + (c1 != c2)
                 current_row.append(min(insertions, deletions, substitutions))
             previous_row = current_row
-     
+
         return previous_row[-1]
 
     def levenshtein_print(self,matrix,word,password):
@@ -261,7 +261,7 @@ class RuleGen:
             # Recurse through reverse path for each operation
             if cost_insert == cost_min:
                 insert_paths = self.levenshtein_reverse_recursive(matrix,i-1,j,path_len+1)
-                for insert_path in insert_paths: paths.append(insert_path + [('insert',i-1,j)])            
+                for insert_path in insert_paths: paths.append(insert_path + [('insert',i-1,j)])
 
             if cost_delete == cost_min:
                 delete_paths = self.levenshtein_reverse_recursive(matrix,i,j-1,path_len+1)
@@ -308,7 +308,7 @@ class RuleGen:
             else:                   suggestions = self.generate_advanced_words(pre_password)
 
             # HACK: Perform some additional expansion on multi-word suggestions
-            # TODO: May be I should split these two and see if I can generate 
+            # TODO: May be I should split these two and see if I can generate
             # rules for each of the suggestions
             for suggestion in suggestions[:self.max_words]:
                 suggestion = suggestion.replace(' ','')
@@ -344,25 +344,25 @@ class RuleGen:
                     best_found_distance = word["distance"]
 
                 elif word["distance"] > best_found_distance:
-                    if self.verbose: 
+                    if self.verbose:
                         print "[-] %s => {edit distance suboptimal: %d (%d)} => %s" % \
                         (word["suggestion"], word["distance"], best_found_distance, word["password"])
-                    break                       
+                    break
 
             # Filter words with too big edit distance
             if word["distance"] <= self.max_word_dist:
-                if self.debug: 
+                if self.debug:
                     print "[+] %s => {edit distance: %d (%d)} = > %s" % \
                     (word["suggestion"], word["distance"],best_found_distance, word["password"])
 
                 words_collection.append(word)
 
             else:
-                if self.verbose: 
+                if self.verbose:
                     print "[-] %s => {max distance exceeded: %d (%d)} => %s" % \
                     (word["suggestion"], word["distance"], self.max_word_dist, word["password"])
 
-        if self.max_words: 
+        if self.max_words:
             words_collection = words_collection[:self.max_words]
 
         return words_collection
@@ -425,9 +425,9 @@ class RuleGen:
         # Generate hashcat rule for each levenshtein rule
         for lev_rule in lev_rules:
 
-            if self.simple_rules: 
+            if self.simple_rules:
                 hashcat_rule = self.generate_simple_hashcat_rules(suggestion, lev_rule, password)
-            else: 
+            else:
                 hashcat_rule = self.generate_advanced_hashcat_rules(suggestion, lev_rule, password)
 
             if hashcat_rule == None:
@@ -451,7 +451,7 @@ class RuleGen:
                     best_found_rule_length = rule_length
 
                 elif rule_length > best_found_rule_length:
-                    if self.verbose: 
+                    if self.verbose:
                         print "[-] %s => {best rule length exceeded: %d (%d)} => %s" % \
                         (suggestion, rule_length, best_found_rule_length, password)
                     break
@@ -555,7 +555,7 @@ class RuleGen:
                     else:
                         hashcat_rules.append("o%s%s" % (self.int_to_hashcat(p),password[p]))
                         word_rules = self.hashcat_rule['o'](word_rules,p,password[p])
-               
+
                 # Case Toggle: Uppercased a letter
                 elif word_rules[p].islower() and word_rules[p].upper() == password[p]:
 
@@ -611,7 +611,7 @@ class RuleGen:
                     #if not "s%s%s" % (word_rules[p],password[p]) in hashcat_rules:
                     hashcat_rules.append("s%s%s" % (word_rules[p],password[p]))
                     word_rules = self.hashcat_rule['s'](word_rules,word_rules[p],password[p])
-                    
+
                 # Replace next character with current
                 elif p < len(password)-1 and p < len(word_rules)-1 and password[p] == password[p+1] and password[p] == word_rules[p+1]:
                     hashcat_rules.append(".%s" % self.int_to_hashcat(p))
@@ -640,12 +640,12 @@ class RuleGen:
                 # SHIFT right
                 elif ord(word_rules[p]) >> 1 == ord(password[p]):
                     hashcat_rules.append("R%s" % self.int_to_hashcat(p))
-                    word_rules = self.hashcat_rule['R'](word_rules,p) 
+                    word_rules = self.hashcat_rule['R'](word_rules,p)
 
                 # Position based replacements.
                 else:
                     hashcat_rules.append("o%s%s" % (self.int_to_hashcat(p),password[p]))
-                    word_rules = self.hashcat_rule['o'](word_rules,p,password[p])            
+                    word_rules = self.hashcat_rule['o'](word_rules,p,password[p])
 
         if self.debug: print "\t[*] Advanced Processing Ended: %s %s" % (word_rules, " ".join(hashcat_rules))
 
@@ -662,7 +662,7 @@ class RuleGen:
                 break
             else:
                 break
-        else:       
+        else:
             hashcat_rules = prefix_rules[::-1]+hashcat_rules[len(prefix_rules):]
 
         ####################################################################
@@ -693,7 +693,7 @@ class RuleGen:
                 break
             else:
                 break
-        else:       
+        else:
             hashcat_rules = precut_rules[::-1]+hashcat_rules[len(precut_rules):]
 
         ####################################################################
@@ -701,7 +701,7 @@ class RuleGen:
         last_postcut = len(password)
         postcut_rules = list()
         for hashcat_rule in hashcat_rules[::-1]:
-            
+
             if hashcat_rule[0] == "D" and self.hashcat_to_int(hashcat_rule[1]) >= last_postcut:
                 postcut_rules.append("]")
             elif len(postcut_rules):
@@ -724,7 +724,7 @@ class RuleGen:
         """ Check whether the password is likely to be reversed successfuly. """
 
         # Skip all numeric passwords
-        if password.isdigit(): 
+        if password.isdigit():
             if self.verbose and not self.quiet: print "[!] %s => {skipping numeric} => %s" % (password,password)
             self.numeric_stats_total += 1
             return False
@@ -797,7 +797,7 @@ class RuleGen:
                         best_found_rule_length = rule_length
 
                     elif rule_length > best_found_rule_length:
-                        if self.verbose: 
+                        if self.verbose:
                             print "[-] %s => {best rule length exceeded: %d (%d)} => %s" % \
                             (word["suggestion"], rule_length, best_found_rule_length, password)
                         break
@@ -808,7 +808,7 @@ class RuleGen:
                     if self.verbose: print "[+] %s => %s => %s" % (word["suggestion"], hashcat_rule_str, password)
 
                     rules_queue.put(hashcat_rule_str)
-                    
+
 
     def password_worker(self,i, passwords_queue, rules_queue, words_queue):
         if self.debug: print "[*] Password analysis worker [%d] started." % i
@@ -894,7 +894,7 @@ class RuleGen:
         password_count = 0
         analysis_start = time.time()
         segment_start = analysis_start
-        try:        
+        try:
             for password in f:
                 password = password.rstrip('\r\n')
                 if len(password) > 0:
@@ -918,7 +918,7 @@ class RuleGen:
         else:
             # Signal workers to stop.
             for i in range(multiprocessing.cpu_count()):
-                passwords_queue.put(None) 
+                passwords_queue.put(None)
 
            # Wait for all of the queued passwords to finish.
             while not passwords_queue.empty():
@@ -941,7 +941,7 @@ class RuleGen:
         print "[-] Skipped %d passwords with non ascii characters (%0.2f%%)" % \
                     (self.foreign_stats_total, float(self.foreign_stats_total)*100.0/float(password_count))
 
-        # TODO: Counter breaks on large files. uniq -c | sort -rn is still the most 
+        # TODO: Counter breaks on large files. uniq -c | sort -rn is still the most
         #       optimal way.
         rules_file = open("%s.rule" % self.basename,'r')
         rules_sorted_file = open("%s-sorted.rule" % self.basename, 'w')
@@ -1085,7 +1085,7 @@ if __name__ == "__main__":
 
 
     # Analyze a single password or several passwords in a file
-    if options.password: 
+    if options.password:
         rulegen.analyze_password(args[0])
     else:
         rulegen.analyze_passwords_file(args[0])
