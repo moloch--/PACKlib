@@ -1,6 +1,6 @@
-#PACK
+#PACKlib
 
-Fork for [PACK](https://thesprawl.org/projects/pack/)
+Library focused fork of [PACK](https://thesprawl.org/projects/pack/)
 
 
 
